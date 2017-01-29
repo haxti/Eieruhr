@@ -1,18 +1,20 @@
-#define TA A1
+#define BTN A1
 #define POTI A0
+#define BUZZER 12
+#define ALARM_ON_DUR 2000   // time in ms, resolution 50ms
+#define ALARM_OFF_DUR 250   // time in ms, resolution 50ms
 #define ISR_CD 300    // Block interrupts for this amount of time in ms.
-#define TIME_MULTI 20  // Accelerates the countdown. Set to 1 in production.
+#define TIME_MULTI 1  // Accelerates the countdown. Set to 1 in production.
 
 enum State {IDLE, RUNNING, ALARM};
 State state = IDLE;
 int targetTime = 0; // ms
 int elapsedTime = 0;  //ms
-volatile bool TAtriggered = false;
+volatile bool BTNtriggered = false;   // ISR changes this when button is pressed.
 
 void setup() {                
   // Serial setup
   Serial.begin(9600);
-  Serial.println("Setup");
 
   // led + buzzer init
   for(int i = 0; i <= 12; i++)
@@ -20,9 +22,9 @@ void setup() {
 
   // input init
   pinMode(POTI,INPUT);
-  pinMode(TA,INPUT_PULLUP);
+  pinMode(BTN,INPUT_PULLUP);
   // Attach an interrupt to the ISR vector
-  attachInterrupt(digitalPinToInterrupt(TA), pin_ISR, RISING);
+  attachInterrupt(digitalPinToInterrupt(BTN), BTN_ISR, RISING);
 }
 
 
@@ -35,10 +37,12 @@ void loop() {
     case IDLE:  state_idle();
                 setLeds();
                 break;
-    case RUNNING: countTime();
+    case RUNNING: state_running();
                   setLeds();
                   break;
-    case ALARM: break;
+    case ALARM: state_alarm();
+                setLeds();
+                break;
     default: state = IDLE;
              break;
   } 
@@ -47,18 +51,19 @@ void loop() {
 // get target time and check for button
 void state_idle()
 {
+  elapsedTime = 0;
   uint input = analogRead(POTI);
-  input < 0 ? input = 0 : true;
+  input < 0 ? input = 0 : input;
   targetTime = 30000 + 351*input;  // one step are 30s in ms
 
   // round time to 30s chunks
   targetTime /= 30000;
   targetTime *= 30000;
   
-  if(TAtriggered)
+  if(BTNtriggered)
   {
     state = RUNNING;
-    TAtriggered = false;
+    BTNtriggered = false;
   };  
 }
 
@@ -82,49 +87,85 @@ void setLeds()
 }
 
 // count up to targeted time
-void countTime()
+void state_running()
 {
   if(elapsedTime < targetTime)
    {
-    elapsedTime += 200;
-    Serial.println(elapsedTime);
-    delay(200 / TIME_MULTI);
+    elapsedTime += 100;
+    Serial.println(elapsedTime/1000);
+    delay(100 / TIME_MULTI);
    } else {
       state = ALARM;
    }
    
-   if(TAtriggered)
+   if(BTNtriggered)
    {
       elapsedTime = 0;
-      TAtriggered = false;
+      BTNtriggered = false;
       state = IDLE;
    }
 }
 
+// Do alarm-state stuff: Ctrl buzzer and wait for BTN
+void state_alarm()
+{
+  static unsigned int timecnt = 0;
+  static bool cntup = true;
+  if(BTNtriggered)
+  {
+    state = IDLE;
+    timecnt = 0;
+    cntup = true;
+    BTNtriggered = false;
+      // reset buzzer
+    digitalWrite(BUZZER, LOW);
+    return;
+  }
+
+  // Count up to ALARM_ON_DUR
+  if(timecnt <= ALARM_ON_DUR && cntup)
+  {
+    digitalWrite(BUZZER, HIGH);
+    delay(50);
+    if(timecnt >= ALARM_ON_DUR)
+    {
+      timecnt = 0;
+      cntup = false;
+    }
+    else
+    {
+      timecnt += 50;
+    }
+  }
+  
+  // Count up to ALARM_OFF_DUR
+  if(timecnt <= ALARM_OFF_DUR && !cntup)
+  {
+    digitalWrite(BUZZER, LOW);
+    delay(50);
+    if(timecnt >= ALARM_OFF_DUR)
+    {
+      timecnt = 0;
+      cntup = true;
+    } 
+    else
+    {
+      timecnt += 50;
+    }
+  }
+  
+}
+
 // interrupt for button pressed.
-void pin_ISR()
+void BTN_ISR()
 {
   static unsigned long lastTimeTriggered = 0;
   // Debounce and also trigger if millis had an overflow
   if((millis() - lastTimeTriggered > ISR_CD) || millis() < lastTimeTriggered)
   {
-    Serial.println("ISR");
-    TAtriggered = true;
+    Serial.println("ISR triggered");
+    BTNtriggered = true;
     lastTimeTriggered = millis();
   }
 }
 
-/*for(int i = 0; i <= 12; i++)
-  {
-    digitalWrite(i, HIGH);
-    delay(analogRead(A0));
-    Serial.println(analogRead(A0));
-    Serial.println(digitalRead(A1));
-  }
-  for(int i = 0; i <= 12; i++)
-  {
-    digitalWrite(i, LOW);
-    delay(analogRead(A0));
-    Serial.println(analogRead(A0));
-    Serial.println(digitalRead(A1));
-  }*/
