@@ -1,8 +1,8 @@
 #define BTN A1
 #define POTI A0
 #define BUZZER 12
-#define ALARM_ON_DUR 2000   // time in ms, resolution 50ms
-#define ALARM_OFF_DUR 250   // time in ms, resolution 50ms
+#define ALARM_ON_DUR 250   // time in ms, resolution 50ms
+#define ALARM_OFF_DUR 2000   // time in ms, resolution 50ms
 #define ISR_CD 300    // Block interrupts for this amount of time in ms.
 #define TIME_MULTI 1  // Accelerates the countdown. Set to 1 in production.
 
